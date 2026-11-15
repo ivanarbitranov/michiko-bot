@@ -6,7 +6,7 @@ compatibility_flags = ["nodejs_compat"]
 # Переменные (не секретные) — можно переопределить через wrangler secret / dashboard.
 [vars]
 CHANNEL_ID = "-1004406377109"           # ID закрытого канала Мичико
-CHANNEL_INVITE = "https://t.me/+PUT_INVITE_LINK_HERE"   # ссылка-приглашение в канал (замени в CF dashboard)
+CHANNEL_INVITE = "https://t.me/+TmTXJlaOYahkN2Iy"   # ссылка-приглашение в закрытый канал Мичико
 LANDING_URL = "https://babushka-michiko.netlify.app/"
 PDF_URL = "https://babushka-michiko.netlify.app/bonus/3-morning-rituals.pdf"
 SUPABASE_URL = "https://hatpikvgnayzgpoywaem.supabase.co"
