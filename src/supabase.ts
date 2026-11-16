@@ -2,6 +2,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 export type BotUser = {
   tg_id: number;
+  bot_id: string | null;      // slug бота (из env BOT_ID)
   username: string | null;
   first_name: string | null;
   source: string | null;      // utm_source при /start, например 'bio' / 'bridge'

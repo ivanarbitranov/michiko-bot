@@ -5,6 +5,7 @@ import { getUser, sb, upsertUser } from './supabase';
 
 export type Env = {
   BOT_TOKEN: string;
+  BOT_ID: string;                 // slug бота в таблице `bots` (для статистики в дашборде)
   WEBHOOK_SECRET: string;
   CHANNEL_ID: string;
   CHANNEL_INVITE: string;
@@ -31,6 +32,7 @@ export function createBot(env: Env) {
     const source = (ctx.match || '').trim() || null;
     await upsertUser(client, {
       tg_id: from.id,
+      bot_id: env.BOT_ID,
       username: from.username ?? null,
       first_name: from.first_name ?? null,
       source,

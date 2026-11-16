@@ -5,6 +5,7 @@ compatibility_flags = ["nodejs_compat"]
 
 # Переменные (не секретные) — можно переопределить через wrangler secret / dashboard.
 [vars]
+BOT_ID = "michiko"                      # slug в таблице `bots`, используется для разбивки статистики в дашборде
 CHANNEL_ID = "-1004406377109"           # ID закрытого канала Мичико
 CHANNEL_INVITE = "https://t.me/+8s9g8uClTbxkNDIy"   # ссылка-приглашение в закрытый канал Мичико (без approval, без лимита)
 LANDING_URL = "https://babushka-michiko.netlify.app/system"
