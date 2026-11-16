@@ -10,6 +10,7 @@ export type Env = {
   CHANNEL_INVITE: string;
   LANDING_URL: string;
   PDF_URL: string;
+  PITCH_PHOTO_URL?: string;       // опционально: фото «Мичико с книгой» перед продажным текстом
   SUPABASE_URL: string;
   SUPABASE_ANON_KEY: string;
 };
@@ -59,9 +60,16 @@ export function createBot(env: Env) {
       pdf_sent_at: new Date().toISOString(),
       state: 'pdf_sent',
     });
+    // Первое сообщение — выдача подарка.
     await ctx.reply(T.pdf_sent(env.PDF_URL), {
       parse_mode: 'HTML',
       link_preview_options: { is_disabled: false },
+    });
+    // Небольшая пауза + «печатает…» — чтобы приглашение в квиз выглядело как отдельная мысль.
+    await ctx.replyWithChatAction('typing').catch(() => {});
+    await new Promise((r) => setTimeout(r, 2200));
+    await ctx.reply(T.quiz_invite, {
+      parse_mode: 'HTML',
       reply_markup: kbStartQuiz(),
     });
   });
@@ -111,6 +119,19 @@ export function createBot(env: Env) {
       utm_source: 'bot', utm_medium: 'quiz',
       utm_content: `${user?.quiz_age || ''}_${user?.quiz_problem || ''}`,
     });
+    // Опциональное фото перед продающим текстом — выглядит живее.
+    if (env.PITCH_PHOTO_URL) {
+      try {
+        await ctx.replyWithPhoto(env.PITCH_PHOTO_URL, {
+          caption: T.quiz_photo_caption,
+          parse_mode: 'HTML',
+        });
+        await ctx.replyWithChatAction('typing').catch(() => {});
+        await new Promise((r) => setTimeout(r, 1600));
+      } catch (e) {
+        console.error('replyWithPhoto failed', e);
+      }
+    }
     await ctx.reply(T.quiz_result(problemLabel, landingUrl), {
       parse_mode: 'HTML',
       link_preview_options: { is_disabled: true },

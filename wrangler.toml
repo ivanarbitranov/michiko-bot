@@ -9,6 +9,7 @@ CHANNEL_ID = "-1004406377109"           # ID закрытого канала М�
 CHANNEL_INVITE = "https://t.me/+TmTXJlaOYahkN2Iy"   # ссылка-приглашение в закрытый канал Мичико
 LANDING_URL = "https://babushka-michiko.netlify.app/"
 PDF_URL = "https://babushka-michiko.netlify.app/bonus/3-morning-rituals.pdf"
+PITCH_PHOTO_URL = ""   # URL фото «Мичико с книгой», появляется перед продающим сообщением. Пусто — фото не отправляется.
 SUPABASE_URL = "https://hatpikvgnayzgpoywaem.supabase.co"
 SUPABASE_ANON_KEY = "sb_publishable_vOxGHi83MXQ9YG84wqv9TA_KOKhWg9-"
 
