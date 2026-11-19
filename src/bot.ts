@@ -14,6 +14,7 @@ export type Env = {
   PITCH_PHOTO_URL?: string;       // опционально: фото «Мичико с книгой» перед продажным текстом
   SUPABASE_URL: string;
   SUPABASE_ANON_KEY: string;
+  ADMIN_TG_ID?: string;           // твой личный tg user_id, куда пересылать заявки
 };
 
 type Ctx = Context & { env: Env };
@@ -30,6 +31,23 @@ export function createBot(env: Env) {
   bot.command('start', async (ctx) => {
     const from = ctx.from!;
     const source = (ctx.match || '').trim() || null;
+
+    // Живая консультация (приход из модалки ленда через /start contact)
+    if (source && source.startsWith('contact')) {
+      await upsertUser(client, {
+        tg_id: from.id,
+        bot_id: env.BOT_ID,
+        username: from.username ?? null,
+        first_name: from.first_name ?? null,
+        source,
+        state: 'contact_waiting',
+      });
+      await ctx.reply(T.contact_welcome(from.first_name), { parse_mode: 'HTML' });
+      await notifyAdmin(env, buildNewContactNotice(from, source));
+      return;
+    }
+
+    // Старая funnel-воронка (подписка на канал + PDF + квиз)
     await upsertUser(client, {
       tg_id: from.id,
       bot_id: env.BOT_ID,
@@ -141,12 +159,133 @@ export function createBot(env: Env) {
     });
   });
 
-  // ========== Фолбэк ==========
-  bot.on('message', async (ctx) => { await ctx.reply(T.unknown); });
+  // ========== Пересылка сообщений ==========
+  bot.on('message', async (ctx) => {
+    const from = ctx.from!;
+    const msg = ctx.message;
+
+    // 1) Админ отвечает reply'ем на пересланное сообщение — переправляем юзеру
+    if (env.ADMIN_TG_ID && String(from.id) === String(env.ADMIN_TG_ID)) {
+      const replyTo = msg.reply_to_message;
+      const marker = replyTo?.text?.match(/\[USER:(\d+)\]/) || replyTo?.caption?.match(/\[USER:(\d+)\]/);
+      if (marker) {
+        const userId = Number(marker[1]);
+        try {
+          if (msg.text) {
+            await ctx.api.sendMessage(userId, msg.text);
+          } else if (msg.photo && msg.photo.length) {
+            await ctx.api.sendPhoto(userId, msg.photo[msg.photo.length - 1].file_id, { caption: msg.caption });
+          } else if (msg.voice) {
+            await ctx.api.sendVoice(userId, msg.voice.file_id, { caption: msg.caption });
+          } else if (msg.document) {
+            await ctx.api.sendDocument(userId, msg.document.file_id, { caption: msg.caption });
+          } else if (msg.video) {
+            await ctx.api.sendVideo(userId, msg.video.file_id, { caption: msg.caption });
+          } else {
+            await ctx.reply('⚠ Этот тип сообщения не поддерживается для пересылки.');
+            return;
+          }
+          await ctx.react('👌').catch(() => {});
+        } catch (e: any) {
+          await ctx.reply(`❌ Не удалось отправить: ${e?.description || e?.message || 'ошибка'}`);
+        }
+        return;
+      }
+      // Если это сообщение от админа без reply — молча игнорируем (или подскажем)
+      if (!msg.text?.startsWith('/')) {
+        await ctx.reply('Чтобы ответить клиенту — сделай reply на пересланное сообщение с меткой [USER:...]');
+      }
+      return;
+    }
+
+    // 2) Юзер в контакт-режиме — пересылаем админу
+    const user = await getUser(client, from.id);
+    if (user?.state?.startsWith('contact')) {
+      await forwardUserMessageToAdmin(env, ctx);
+      await upsertUser(client, { tg_id: from.id, state: 'contact_active' });
+      if (user.state === 'contact_waiting') {
+        await ctx.reply(T.contact_received);
+      }
+      return;
+    }
+
+    // 3) Остальное — стандартный fallback
+    await ctx.reply(T.unknown);
+  });
 
   bot.catch((err) => { console.error('bot error', err); });
 
   return bot;
+}
+
+// ===== Admin notifications =====
+
+function buildNewContactNotice(
+  from: { id: number; first_name?: string; last_name?: string; username?: string },
+  source: string,
+): string {
+  const name = [from.first_name, from.last_name].filter(Boolean).join(' ') || '(без имени)';
+  const uname = from.username ? `@${from.username}` : '—';
+  return `🆕 Новая заявка в @babushka_michiko
+
+👤 <b>${escapeHtml(name)}</b>
+🔗 ${escapeHtml(uname)}
+🌱 Источник: <code>${escapeHtml(source)}</code>
+
+[USER:${from.id}]
+
+↩️ Чтобы ответить — сделай <b>reply</b> на это сообщение, текст уйдёт клиенту от имени Мичико.`;
+}
+
+async function forwardUserMessageToAdmin(env: Env, ctx: Context) {
+  if (!env.ADMIN_TG_ID) return;
+  const from = ctx.from!;
+  const msg = ctx.message!;
+  const name = [from.first_name, from.last_name].filter(Boolean).join(' ') || '(без имени)';
+  const uname = from.username ? `@${from.username}` : '—';
+  const header = `💬 Сообщение от <b>${escapeHtml(name)}</b> (${escapeHtml(uname)})
+[USER:${from.id}]
+`;
+
+  try {
+    if (msg.text) {
+      await ctx.api.sendMessage(env.ADMIN_TG_ID, header + '\n' + escapeHtml(msg.text), { parse_mode: 'HTML' });
+    } else if (msg.photo && msg.photo.length) {
+      const fileId = msg.photo[msg.photo.length - 1].file_id;
+      await ctx.api.sendPhoto(env.ADMIN_TG_ID, fileId, { caption: header + '\n' + escapeHtml(msg.caption || ''), parse_mode: 'HTML' });
+    } else if (msg.voice) {
+      await ctx.api.sendVoice(env.ADMIN_TG_ID, msg.voice.file_id, { caption: header, parse_mode: 'HTML' });
+    } else if (msg.document) {
+      await ctx.api.sendDocument(env.ADMIN_TG_ID, msg.document.file_id, { caption: header + '\n' + escapeHtml(msg.caption || ''), parse_mode: 'HTML' });
+    } else if (msg.video) {
+      await ctx.api.sendVideo(env.ADMIN_TG_ID, msg.video.file_id, { caption: header + '\n' + escapeHtml(msg.caption || ''), parse_mode: 'HTML' });
+    } else if (msg.sticker) {
+      await ctx.api.sendMessage(env.ADMIN_TG_ID, header + '\n(стикер)', { parse_mode: 'HTML' });
+      await ctx.api.sendSticker(env.ADMIN_TG_ID, msg.sticker.file_id);
+    } else {
+      await ctx.api.sendMessage(env.ADMIN_TG_ID, header + '\n(неподдерживаемый тип сообщения)', { parse_mode: 'HTML' });
+    }
+  } catch (e) {
+    console.error('forwardUserMessageToAdmin error', e);
+  }
+}
+
+async function notifyAdmin(env: Env, text: string) {
+  if (!env.ADMIN_TG_ID) return;
+  try {
+    const url = `https://api.telegram.org/bot${env.BOT_TOKEN}/sendMessage`;
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: env.ADMIN_TG_ID, text, parse_mode: 'HTML' }),
+    });
+  } catch (e) {
+    console.error('notifyAdmin error', e);
+  }
+}
+
+function escapeHtml(s: string): string {
+  return String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]!));
 }
 
 async function isSubscribed(env: Env, userId: number): Promise<boolean> {
