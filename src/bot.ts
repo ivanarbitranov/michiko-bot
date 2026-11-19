@@ -226,7 +226,7 @@ function buildNewContactNotice(
 ): string {
   const name = [from.first_name, from.last_name].filter(Boolean).join(' ') || '(без имени)';
   const uname = from.username ? `@${from.username}` : '—';
-  return `🆕 Новая заявка в @babushka_michiko
+  return `🆕 Новая заявка в @babushka_michiko_bot
 
 👤 <b>${escapeHtml(name)}</b>
 🔗 ${escapeHtml(uname)}
